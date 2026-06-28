@@ -11,11 +11,11 @@ offline under `app/src/main/assets/` and served over a secure
 A ready-to-install debug APK is committed at:
 
 ```
-android/apk/ChineseChess-xiangqi-v1.0.apk
+android/apk/ChineseChess-xiangqi-v1.1.apk
 ```
 
 Download it to an Android tablet/phone, enable "install from unknown sources",
-and tap to install — or `adb install -r android/apk/ChineseChess-xiangqi-v1.0.apk`.
+and tap to install — or `adb install -r android/apk/ChineseChess-xiangqi-v1.1.apk`.
 Runs fully offline on Android 5.0+ (minSdk 21).
 
 ## The game (`app/src/main/assets/index.html`)
@@ -27,9 +27,16 @@ dependencies, pure HTML5 canvas + JS):
   cannon (screen capture), elephant (river + eye-block), advisor & general
   (palace), soldier (sideways after crossing the river), flying-general rule,
   and check / checkmate / stalemate detection.
+- Two play modes (模式): **人机** (vs the built-in AI) and **双人** (two-player
+  hot-seat on one device).
 - Built-in AI opponent (negamax + alpha-beta with move ordering) at three
   difficulty levels (易 / 中 / 难).
-- Choose to play 红 (first) or 黑; board auto-flips to your side.
+- Choose to play 红 (first) or 黑; board auto-flips to your side (vs-AI).
+- **Per-player piece orientation**: each side's characters face that player —
+  the top side's glyphs are rotated 180°, like a real board across a table.
+- **Sound effects** (音效) for moves, captures, check, and win/lose —
+  synthesized with the Web Audio API, so no audio files and fully offline;
+  toggle on/off in the header.
 - Undo (悔棋), new game (新局), move highlights, last-move markers,
   check warnings, and a tablet-friendly responsive canvas.
 

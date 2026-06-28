@@ -17,20 +17,21 @@
   #app { display: flex; flex-direction: column; height: 100%; }
   header {
     flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 18px; gap: 12px;
+    padding: 10px 16px; gap: 10px; flex-wrap: wrap;
     background: linear-gradient(180deg,#4a2f16,#3a2511);
     box-shadow: 0 2px 8px rgba(0,0,0,.4);
   }
   header h1 { font-size: 20px; margin: 0; letter-spacing: 2px; color: #ffd98a; white-space: nowrap; }
-  #status { font-size: 16px; color: #ffe9c4; flex: 1 1 auto; text-align: center; }
+  #status { font-size: 16px; color: #ffe9c4; flex: 1 1 120px; text-align: center; }
   #status.check { color: #ff7b6b; font-weight: bold; }
-  .btns { display: flex; gap: 8px; flex: 0 0 auto; }
+  .btns { display: flex; gap: 8px; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
   button {
     font-family: inherit; font-size: 14px; color: #3a2511;
     background: linear-gradient(180deg,#f6d99a,#e3bd70);
-    border: none; border-radius: 8px; padding: 8px 12px; cursor: pointer;
+    border: none; border-radius: 8px; padding: 8px 11px; cursor: pointer;
     box-shadow: 0 2px 0 #a07c3a; font-weight: 600; white-space: nowrap;
   }
+  button.off { background: linear-gradient(180deg,#cdbda0,#b3a387); color: #5a4a32; }
   button:active { transform: translateY(1px); box-shadow: 0 1px 0 #a07c3a; }
   #boardWrap { flex: 1 1 auto; position: relative; display: flex; align-items: center; justify-content: center; }
   canvas { display: block; touch-action: none; }
@@ -57,9 +58,11 @@
     <h1>中国象棋</h1>
     <div id="status">红方先行</div>
     <div class="btns">
-      <button id="btnUndo">悔棋</button>
+      <button id="btnMode">模式: 人机</button>
       <button id="btnLevel">难度: 中</button>
       <button id="btnSide">执红</button>
+      <button id="btnSound">音效: 开</button>
+      <button id="btnUndo">悔棋</button>
       <button id="btnNew">新局</button>
     </div>
   </header>
@@ -96,12 +99,43 @@
   let history = [];      // stack of moves for undo
   let gameOver = false;
   let aiThinking = false;
+  let mode = 'ai';      // 'ai' (人机) or 'pvp' (双人)
   let level = 1;        // 0 easy,1 medium,2 hard
   const LEVELS = [
     { name:'易', depth:2 },
     { name:'中', depth:3 },
     { name:'难', depth:4 }
   ];
+
+  // ---- Sound (Web Audio, synthesized — no asset files, fully offline) -------
+  let audioCtx = null, soundOn = true;
+  function ensureAudio() {
+    try {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) audioCtx = new AC();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) { /* ignore */ }
+  }
+  function tone(freq, dur, type, gain, delayMs) {
+    if (!soundOn || !audioCtx) return;
+    const t0 = audioCtx.currentTime + (delayMs || 0) / 1000;
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = type || 'triangle';
+    osc.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(gain || 0.2, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  }
+  function sndMove()    { tone(210, 0.07, 'triangle', 0.22); }
+  function sndCapture() { tone(130, 0.12, 'square', 0.22); tone(320, 0.05, 'triangle', 0.18, 10); }
+  function sndCheck()   { tone(660, 0.10, 'sawtooth', 0.18); tone(880, 0.12, 'sawtooth', 0.18, 110); }
+  function sndWin()     { [523,659,784,1047].forEach((f,i) => tone(f, 0.16, 'triangle', 0.2, i*120)); }
+  function sndLose()    { [392,330,262].forEach((f,i) => tone(f, 0.22, 'sine', 0.22, i*150)); }
 
   function freshBoard() {
     const b = Array.from({length: ROWS}, () => Array(COLS).fill(null));
@@ -341,6 +375,7 @@
     board[m.fr][m.fc] = null;
     lastMove = { fr:m.fr, fc:m.fc, tr:m.tr, tc:m.tc };
     turn = other(turn);
+    if (cap) sndCapture(); else sndMove();
   }
 
   function undoOne() {
@@ -358,10 +393,19 @@
     if (moves.length === 0) {
       gameOver = true;
       const loser = turn;
-      const humanWon = loser !== playerColor;
+      const winner = other(loser);
       const reason = inCheck(board, turn) ? '将死' : '困毙';
-      showOverlay(humanWon ? '你赢了！' : '电脑获胜',
-        (loser === RED ? '红方' : '黑方') + reason + (humanWon ? '，恭喜！' : '，再接再厉。'));
+      const loserName = loser === RED ? '红方' : '黑方';
+      const winnerName = winner === RED ? '红方' : '黑方';
+      if (mode === 'pvp') {
+        showOverlay(winnerName + '胜', loserName + reason + '，' + winnerName + '获胜！');
+        sndWin();
+      } else {
+        const humanWon = loser !== playerColor;
+        showOverlay(humanWon ? '你赢了！' : '电脑获胜',
+          loserName + reason + (humanWon ? '，恭喜！' : '，再接再厉。'));
+        if (humanWon) sndWin(); else sndLose();
+      }
       return true;
     }
     return false;
@@ -490,11 +534,16 @@
     ctx.beginPath(); ctx.arc(x, y, pieceR*0.78, 0, Math.PI*2);
     ctx.strokeStyle = red ? 'rgba(178,34,34,.5)' : 'rgba(20,20,20,.5)'; ctx.lineWidth = 1;
     ctx.stroke();
-    // glyph
+    // glyph — oriented toward each player (top side rotated 180°)
+    const bottomColor = flip ? BLACK : RED;
+    ctx.save();
+    ctx.translate(x, y + pieceR*0.05);
+    if (p.c !== bottomColor) ctx.rotate(Math.PI);
     ctx.fillStyle = red ? '#b22222' : '#1a1a1a';
     ctx.font = `bold ${Math.floor(pieceR*1.15)}px "KaiTi","STKaiti","Microsoft YaHei",serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(NAMES[p.c][p.t], x, y + pieceR*0.05);
+    ctx.fillText(NAMES[p.c][p.t], 0, 0);
+    ctx.restore();
   }
 
   function roundRect(x, y, w, h, r) {
@@ -509,7 +558,9 @@
 
   // ---- Interaction ---------------------------------------------------------
   function onTap(x, y) {
-    if (gameOver || aiThinking || turn !== playerColor) return;
+    ensureAudio();
+    if (gameOver || aiThinking) return;
+    if (mode === 'ai' && turn !== playerColor) return;
     const pos = fromScreen(x, y); if (!pos) return;
     const { r, c } = pos;
     const p = board[r][c];
@@ -521,16 +572,16 @@
         afterPlayerMove();
         return;
       }
-      if (p && p.c === playerColor) { selectPiece(r, c); return; }
+      if (p && p.c === turn) { selectPiece(r, c); return; }
       selected = null; legalForSel = []; draw();
       return;
     }
-    if (p && p.c === playerColor) selectPiece(r, c);
+    if (p && p.c === turn) selectPiece(r, c);
   }
 
   function selectPiece(r, c) {
     selected = { r, c };
-    const all = legalMoves(board, playerColor).filter(m => m.fr === r && m.fc === c);
+    const all = legalMoves(board, turn).filter(m => m.fr === r && m.fc === c);
     legalForSel = all.map(m => [m.tr, m.tc]);
     draw();
   }
@@ -539,7 +590,8 @@
     draw();
     updateStatus();
     if (checkEnd()) return;
-    scheduleAI();
+    if (inCheck(board, turn)) sndCheck();
+    if (mode === 'ai') scheduleAI();
   }
 
   function scheduleAI() {
@@ -552,17 +604,24 @@
       document.getElementById('thinking').style.display = 'none';
       if (m) { doMove(m); draw(); }
       updateStatus();
-      checkEnd();
+      if (!checkEnd() && inCheck(board, turn)) sndCheck();
     }, 60);
   }
 
   function updateStatus() {
     const el = document.getElementById('status');
     if (gameOver) return;
+    const sideName = (turn === RED ? '红' : '黑') + '方';
     let txt;
-    if (aiThinking) txt = '电脑思考中…';
-    else if (turn === playerColor) txt = '轮到你了（' + (playerColor === RED ? '红' : '黑') + '方）';
-    else txt = '电脑走子（' + (turn === RED ? '红' : '黑') + '方）';
+    if (mode === 'pvp') {
+      txt = sideName + '走棋';
+    } else if (aiThinking) {
+      txt = '电脑思考中…';
+    } else if (turn === playerColor) {
+      txt = '轮到你了（' + (playerColor === RED ? '红' : '黑') + '方）';
+    } else {
+      txt = '电脑走子（' + sideName + '）';
+    }
     const chk = inCheck(board, turn);
     el.classList.toggle('check', chk);
     if (chk) txt = '将军！ ' + txt;
@@ -577,27 +636,35 @@
   }
   function hideOverlay() { document.getElementById('overlay').style.display = 'none'; }
 
+  function updateControls() {
+    // 难度 / 执红 only matter against the AI
+    const show = mode === 'ai' ? 'inline-block' : 'none';
+    document.getElementById('btnLevel').style.display = show;
+    document.getElementById('btnSide').style.display = show;
+    document.getElementById('btnMode').textContent = '模式: ' + (mode === 'ai' ? '人机' : '双人');
+  }
+
   function newGame() {
     board = freshBoard();
     turn = RED;
     selected = null; legalForSel = []; lastMove = null;
     history = []; gameOver = false; aiThinking = false;
-    flip = (playerColor === BLACK);
+    flip = (mode === 'ai' && playerColor === BLACK);
     hideOverlay();
     document.getElementById('thinking').style.display = 'none';
     draw();
     updateStatus();
-    if (turn !== playerColor) scheduleAI();
+    if (mode === 'ai' && turn !== playerColor) scheduleAI();
   }
 
   function undo() {
-    if (aiThinking || gameOver && false) return;
+    if (aiThinking) return;
     if (gameOver) gameOver = false;
     hideOverlay();
-    // undo back to the human's turn (usually two half-moves)
     if (!history.length) return;
     undoOne();
-    if (history.length && turn !== playerColor) undoOne();
+    // vs-AI: step back one extra half-move so it's the human's turn again
+    if (mode === 'ai' && history.length && turn !== playerColor) undoOne();
     selected = null; legalForSel = [];
     draw(); updateStatus();
   }
@@ -611,17 +678,32 @@
   canvas.addEventListener('click', e => { const p = canvasPoint(e); onTap(p.x, p.y); });
   canvas.addEventListener('touchend', e => { e.preventDefault(); const p = canvasPoint(e); onTap(p.x, p.y); }, { passive: false });
 
-  document.getElementById('btnNew').onclick = newGame;
-  document.getElementById('ovNew').onclick = newGame;
-  document.getElementById('btnUndo').onclick = undo;
+  document.getElementById('btnNew').onclick = () => { ensureAudio(); newGame(); };
+  document.getElementById('ovNew').onclick = () => { ensureAudio(); newGame(); };
+  document.getElementById('btnUndo').onclick = () => { ensureAudio(); undo(); };
+  document.getElementById('btnMode').onclick = () => {
+    ensureAudio();
+    mode = mode === 'ai' ? 'pvp' : 'ai';
+    updateControls();
+    newGame();
+  };
   document.getElementById('btnLevel').onclick = () => {
+    ensureAudio();
     level = (level + 1) % LEVELS.length;
     document.getElementById('btnLevel').textContent = '难度: ' + LEVELS[level].name;
   };
   document.getElementById('btnSide').onclick = () => {
+    ensureAudio();
     playerColor = other(playerColor);
     document.getElementById('btnSide').textContent = playerColor === RED ? '执红' : '执黑';
     newGame();
+  };
+  document.getElementById('btnSound').onclick = () => {
+    soundOn = !soundOn;
+    const b = document.getElementById('btnSound');
+    b.textContent = '音效: ' + (soundOn ? '开' : '关');
+    b.classList.toggle('off', !soundOn);
+    if (soundOn) { ensureAudio(); sndMove(); }
   };
 
   window.addEventListener('resize', layout);
@@ -630,6 +712,7 @@
   // ---- Boot ----------------------------------------------------------------
   playerColor = RED;
   flip = false;
+  updateControls();
   newGame();
   layout();
 })();
