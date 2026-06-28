@@ -1,0 +1,26 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Red rounded background -->
+    <path
+        android:fillColor="#B22222"
+        android:pathData="M0,24 C0,10.7 10.7,0 24,0 L84,0 C97.3,0 108,10.7 108,24 L108,84 C108,97.3 97.3,108 84,108 L24,108 C10.7,108 0,97.3 0,84 Z" />
+
+    <!-- Wooden piece disc -->
+    <path
+        android:fillColor="#F3D9A0"
+        android:pathData="M54,54 m-36,0 a36,36 0 1,0 72,0 a36,36 0 1,0 -72,0" />
+
+    <!-- Inner red ring -->
+    <path
+        android:fillColor="#B22222"
+        android:pathData="M54,54 m-32,0 a32,32 0 1,0 64,0 a32,32 0 1,0 -64,0 Z M54,54 m-27,0 a27,27 0 1,1 54,0 a27,27 0 1,1 -54,0 Z" />
+
+    <!-- Stylised 帥 / general mark: a bold cross-like glyph -->
+    <path
+        android:fillColor="#7A1414"
+        android:pathData="M50,34 L58,34 L58,49 L73,49 L73,57 L58,57 L58,74 L50,74 L50,57 L35,57 L35,49 L50,49 Z" />
+</vector>
